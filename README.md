@@ -7,14 +7,6 @@ Queries on a Movie Database, Including Bacon Numbers
 - writing scripts in PHP that interact with a database
 - The goal is to complete the functionality of some command-line tools via a combination of database code and PHP code.
 
-Tasks
-For each task, you are required to implement an executable PHP program command that takes in commandline arguments and displays the result in a specified format (which we will use for auto-marking). We assume the sample output format for each task below to to test your programs. In particular, as shown in the code of pg, if any field of your output is empty, you should hide that field and its related formatting text (for example, in pg, a comma and a space will not be printed for duration if it is empty). Of course, you are free to print debugging information temporarily (e.g. to add debugging print_r() calls), but please remember to eventually disable or remove them when your solution is submitted for marking. For all the tasks below, unless it is specified explicitly, we assume movies including any titles stored in the movie table (i.e., including movies and TV shows etc).
-
-In implementing your functions, you are free to partition the functionality however you like between the database and the PHP scripts. In the past, some students have solved similar assignments to this by writing just about everything in SQL views and PLpgSQL functions and using PHP simply as a vehicle for collecting the results. Others have done most of the computational work in PHP. Do whatever you feel most comfortable with, but make sure that you limit your changes just to the files that you are required to submit, and do not create additional tables.
-
-For each task below, output nothing if there is no result returned from the database. If the task does not specify particular output order, your program can output in any row order. If multiple columns are involved in your output, your output should follow the same column order as the sample output presented in each task below (for example, the order of the fields inside the brackets of the pg output matters).
-
-
 ### Task A: The list of movies acted by a given actor (1 marks)
 The acting script lists the movie title, its director, its year, its content rating and IMDB score, one per line, of all the movies acted by the given actor. The output is sorted by year and then by movie title, both in ascending order. If any movies have empty year, output them at the end and sort them by movie title in ascending order. It accepts one command-line argument: an actor name (has to exactly match a name stored in the database and the matching is case insensitive). It has the following output format:
 
