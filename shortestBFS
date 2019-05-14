@@ -1,0 +1,154 @@
+#!/usr/bin/php
+<?php
+
+assert_options(ASSERT_BAIL, true);
+//
+// pg - print all PG and PG-13 movies of a given year
+//
+
+// include the common PHP code file
+require("a2.php");
+
+/*
+    GLOBAL VARIABLES
+*/
+$db = dbConnect(DB_CONNECTION);
+$maxBaconNum = 6;
+
+/*
+    QUERIES
+*/
+
+// returns a query list of 'acting' roles related to an actor
+function listRelations($actorId){
+    $query = '
+        select  %d as src,
+                movie_id as rel,
+                actor_id as dst
+          from  listRelations(%d)
+    ';
+    return dbQuery($GLOBALS['db'], mkSQL($query, $actorId, $actorId));
+}
+
+// Checks if vertex has already been visited in the path
+function isNotVisited($vertex, $path){
+    foreach (array_slice($path, 1) as $edge){
+       // if ($edge['src'] == 539){
+            //echo "$edge[src] - $edge[dst]\n";
+        //}
+        if ($edge['dst'] == $vertex)
+            return false;
+    }
+    return true;
+}
+
+/*
+    $visited = (vertex => parent edge)
+    visited stores the parent edge to the vertex
+    vertices are actor ids
+    edges are acting relation $edge = ('actor_id' => %d, 'movie_id' => %d)
+*/
+function shortestPaths($src, $dst){
+    $pathsToDestination = array();
+    $queue = new SplQueue();         // A Queue of paths
+    $edge = array('src' => $src, 'dst' => $src);
+    $path = array($edge);     // path = [src, src->1st, ... 5th->dst]
+    $queue->enqueue($path);    // Start the queue off with the source vertex
+
+    while ($queue->count() > 0) {
+        $path = $queue->dequeue();      // load the next vertex to search
+        $lastEdge = end($path);
+        $vertex = $lastEdge['dst'];
+
+        $baconNum = count($path) - 1;
+        //var_dump($queue->count());
+        //echo "$baconNum\n";
+        //echo "$GLOBALS[maxBaconNum]\n";
+
+        // early exits
+        if ($vertex == $dst && $baconNum <= $GLOBALS['maxBaconNum']){
+            if ($baconNum < $GLOBALS['maxBaconNum']){
+                $GLOBALS['maxBaconNum'] = $baconNum;
+                echo "maxBaconNum updated to $baconNum\n";
+            }
+            echo "Path found of bacon number $baconNum\n";
+            array_push($pathsToDestination, array_slice($path, 1));
+            continue;
+        } else if ($baconNum + 1 > $GLOBALS['maxBaconNum']){
+            //echo "Branch clipping\n";
+            continue;
+        }
+        $relations = listRelations($vertex);
+        while ($edge = dbNext($relations)){
+            assert(array_key_exists('dst', $edge));
+            assert(array_key_exists('src', $edge));
+           // If we find an relation that leads to the endActor
+            if (isNotVisited($edge['dst'], $path)){
+                $newPath = $path;
+                array_push($newPath, $edge);
+                $queue->enqueue($newPath);  // queue vertex for searching
+            }
+        }
+    }
+    return $pathsToDestination;
+}
+
+function printPaths($paths, $startActor){
+    $lines = array();
+    foreach ($paths as $path){
+        $baconNum = count($path);
+        if ($baconNum > $GLOBALS['maxBaconNum'])
+            continue;
+        $relations = array();
+        // for each relation
+        foreach ($path as $edge){
+            $srcActor = getActor($edge['src']);
+            $movie    = getMovie($edge['rel']);
+            $actor    = getActor($edge['dst']);
+            $relation = "$srcActor[name] was in $movie[title] ($movie[year]) with $actor[name]";
+            // push relation
+            array_push($relations, $relation);
+        }
+        $line = join('; ', $relations);
+        array_push($lines, "$line");
+    }
+    natcasesort($lines);
+
+    $i = 1;
+    foreach ($lines as $line){
+        echo "$i. $line\n";
+        $i++;
+    }
+}
+
+
+/*
+    PROGRAM BODY BEGINS
+*/
+// Check arguments
+$usage = "Usage: startActor endActor\n";
+$usage = $usage."e.g \"tom cruise\" \"Jeremy Renner\"\n";
+
+if (count($argv) < 2) exit("$usage\n");
+
+// Find the starting actor's ID
+$startActor = getActor($argv[1]);
+if (!$startActor){
+    echo "$argv[1] not found";
+    return;
+}
+// Find the ending actor's ID
+$endActor = getActor($argv[2]);
+if (!$endActor){
+    echo "$argv[2] not found";
+    return;
+}
+
+// Find the shortest paths to the end actor
+$paths = shortestPaths($startActor['id'], $endActor['id']);
+printPaths($paths, $startActor);
+
+echo "\n";
+
+
+?>

@@ -1,0 +1,109 @@
+#!/usr/bin/php
+<?php
+
+// include the common PHP code file
+require("a2.php");
+
+// Find the list of genres and keywords
+function findGenresKeywords($movie){
+    $query = "
+        select genres, keywords
+        from   (
+            select movie_id, array_agg(genre::text) as genres
+            from   genre
+            where  movie_id = $movie[id]
+            group  by movie_id
+            ) as genre
+        join   (
+            select movie_id, array_agg(keyword::text) as keywords
+            from   keyword
+            where  movie_id = $movie[id]
+            group  by movie_id
+            ) as keyword on (genre.movie_id = keyword.movie_id)
+    ";
+    $r = dbOneTuple($GLOBALS['db'], $query);
+    return $r;
+}
+// find a list of movies that have genres and keywords
+function findSimilarMovies($movie, $genres, $keywords, $limit){
+    $remove = array('"', ',', "}", "{");
+    $sub = array('', "', '", "'", "'");
+    // remove double quotes and wrap elements in " ' "
+    $genres    = str_replace($remove, $sub, $genres);
+    $keywords    = str_replace($remove, $sub, $keywords);
+    $query ="
+        select title, year,
+               coalesce(cardinality(genre.genres), 0) as common_genres,
+               coalesce(cardinality(keyword.keywords), 0) as common_keywords,
+               rating.imdb_score as imdb_score,
+               rating.num_voted_users as num_voted_users
+        from   (
+            select genre.movie_id, array_agg(genre::text) as genres
+            from   genre
+            where  genre = ANY(ARRAY[$genres])
+                   and genre.movie_id != $movie[id]
+            group  by genre.movie_id
+        ) as genre
+
+        left join   (
+            select keyword.movie_id, array_agg(keyword.keyword::text) as keywords
+            from   keyword
+            where  keyword = ANY(ARRAY[$keywords])
+                   and keyword.movie_id != $movie[id]
+            group  by keyword.movie_id
+        ) as keyword on (genre.movie_id = keyword.movie_id)
+
+        left join rating on (genre.movie_id = rating.movie_id)
+        left join movie  on (movie.id = genre.movie_id)
+
+         order by common_genres desc,
+                  common_keywords desc,
+                  rating.imdb_score desc,
+                  rating.num_voted_users desc
+        limit $limit
+    ;";
+
+    return dbQuery($GLOBALS['db'], $query); 
+}
+
+// PROGRAM BODY BEGINS
+$usage = "Usage: MovieTitle K\n";
+$usage = $usage."MovieTitle is case sensitive\n";
+$usage = $usage."1 <= K <= 1000\n";
+
+// Check arguments
+if (count($argv) < 2 || count($argv) > 3) exit("$usage\n");
+
+$title = $argv[1]; $limit = (int)$argv[2];
+
+$movie = getMovie($title);
+// Find list of genres and keywords
+$r = findGenresKeywords($movie);
+// Find a list of movies that contain genres or keywords
+$movies = findSimilarMovies($movie ,$r['genres'], $r['keywords'], $limit);
+$i = 1;
+while ($movie = dbNext($movies)) {
+    echo "$i. $movie[title]";
+
+    if (!empty($movie['year']))
+        echo " (".$movie['year'].')';
+
+    echo " [";
+    $array = new ArrayObject();
+    if (array_key_exists('common_genres',$movie))
+        $array->append($movie['common_genres']);
+    if (array_key_exists('common_keywords',$movie))
+        $array->append($movie['common_keywords']);
+    if (array_key_exists('imdb_score',$movie))
+        $array->append($movie['imdb_score']);
+    if (array_key_exists('num_voted_users',$movie))
+        $array->append($movie['num_voted_users']);
+    echo join(', ',$array->getArrayCopy());
+    echo "]";
+
+    echo "\n";
+    $i++;
+}
+
+
+?>

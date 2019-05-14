@@ -1,0 +1,16 @@
+ set_config 
+------------
+ 
+(1 row)
+
+ setval 
+--------
+   6237
+(1 row)
+
+ setval 
+--------
+   2392
+(1 row)
+
+YYYYYYYYYNYYYYY 

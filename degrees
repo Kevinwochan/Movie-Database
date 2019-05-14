@@ -1,0 +1,140 @@
+#!/usr/bin/php
+<?php
+
+assert_options(ASSERT_BAIL, true);
+//
+// pg - print all PG and PG-13 movies of a given year
+//
+
+// include the common PHP code file
+require("a2.php");
+
+/*
+    GLOBAL VARIABLES
+*/
+$maxBaconNum = 6;
+
+/*
+    QUERIES
+*/
+function listEdges($actorId, $actings){
+    $movies = $actings['byActor'];
+    $movies = $movies[$actorId];
+    $edges = array();
+    foreach($movies as $movie){
+        $actors = $actings['byMovie'];
+        $actors = $actors[$movie];
+        foreach($actors as $actor){
+            if($actor != $actorId){
+                $edge['rel'] = $movie;
+                $edge['dst'] = $actor;
+                array_push($edges, $edge);
+            }
+        }
+    }
+    return $edges;
+}
+
+function getAllActing(){
+    $query = "SELECT movie_id,
+              ARRAY_TO_STRING(ARRAY_AGG(actor_id),',') AS actors
+              FROM acting
+              GROUP BY movie_id";
+    $result = dbQuery($GLOBALS['db'], $query);
+    while ($movie = dbNext($result)){
+        $byMovie[$movie['movie_id']] = explode(',',$movie['actors']);
+    }
+
+    $query = "SELECT actor_id,
+              ARRAY_TO_STRING(ARRAY_AGG(movie_id),',') AS movies
+              FROM acting
+              GROUP BY actor_id";
+    $result = dbQuery($GLOBALS['db'], $query);
+    while ($actor = dbNext($result)){
+        $byActor[$actor['actor_id']] = explode(',',$actor['movies']);
+    }
+    return $graph = array ('byMovie' => $byMovie, 'byActor' => $byActor);
+}
+
+function distanceFromActors($src, $maxBacon){
+    $acting = getAllActing();
+    $queue = new SplQueue();   // A Queue of paths
+    $queue->enqueue($src);     // Start the queue off with the source vertex
+    $baconNum = 0;
+    $visited[$src] = $baconNum;
+
+    while ($queue->count() > 0) {
+        $vertex = $queue->dequeue();      // load the next vertex to search
+        $baconNum = $visited[$vertex];
+
+        // early exits
+        if ($baconNum + 1 > $maxBacon)
+            continue;
+
+        $edges = listEdges($vertex, $acting);
+        foreach ($edges as $edge){
+            $newVertex = $edge['dst'];
+            if (!array_key_exists($newVertex, $visited)){
+                $visited[$newVertex] = $visited[$vertex] + 1;
+                $queue->enqueue($newVertex);  // queue vertex for searching
+            }
+        }
+    }
+    return $visited;
+}
+
+function printActors($actors, $minBacon, $maxBacon){
+    $i = 1;
+    for ($baconNum = $minBacon; $baconNum <= $maxBacon; $baconNum++){
+        $actorIDs = array_keys($actors, $baconNum);
+        $actorNames = getActor($actorIDs);
+        //var_dump($actorNames);
+        asort($actorNames);
+        foreach ($actorNames as $actor){
+            echo "$i. $actor[name] ($baconNum)\n";
+            $i++;
+        }
+    }
+}
+
+function checkBacon($num1, $num2){
+    if (1 <= $num1 || $num1 >= 6)
+        return false;
+
+    if (1 <= $num2 || $num2 >= 6)
+        return false;
+
+    if ($num1 > $num2)
+        return false;
+
+    return true;
+}
+
+/*
+    PROGRAM BODY BEGINS
+*/
+// Check arguments
+$usage = "Usage: actorName M N\n";
+$usage = $usage."e.g \"chris evans\" 1 2";
+
+if (count($argv) < 4) exit("$usage\n");
+// Find the starting actor's ID
+$startActor = getActor($argv[1]);
+if (!$startActor){
+    echo "$argv[1] not found\n";
+    return;
+}
+
+$minBacon = (int)$argv[2]; $maxBacon = (int)$argv[3];
+//var_dump($minBacon);
+if (checkBacon($minBacon, $maxBacon)){
+    echo "$argv[2] and $argv[3] must be between 1 and 6 from smallest to largest\n";
+    return;
+}
+
+
+// Find the shortest paths to the end actor
+$distances = distanceFromActors($startActor['id'], $maxBacon);
+printActors($distances, $minBacon, $maxBacon);
+
+?>

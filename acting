@@ -1,0 +1,56 @@
+#!/usr/bin/php
+<?php
+
+//
+// pg - print all PG and PG-13 movies of a given year
+//
+
+// include the common PHP code file
+require("a2.php");
+
+
+
+// PROGRAM BODY BEGINS
+
+$usage = "Usage: $argv[0] Actor (not case sensitive)\n e.g ./acting 'james franco'";
+
+// Check arguments
+if (count($argv) < 2 || count($argv) > 3) exit("$usage\n");
+
+// Verify the input
+$actorName = $argv[1];
+$actor = getActor($actorName);
+if (!$actor){
+    echo "$argv[1] not found";
+    return;
+}
+
+// Find the movies Listed
+$q = "SELECT title, director_name, year, content_rating, imdb_score
+      FROM   listActedMovies(%s)
+      ORDER  by year, title
+";
+$r = dbQuery($GLOBALS['db'], mkSQL($q, $actor['name']));
+
+
+// Iterate through the results and print
+$i = 1;
+while ($movie = dbNext($r)) {
+    echo "$i. $movie[title]";
+
+    if (!empty($movie['director_name']))
+        echo" -- $movie[director_name]";
+
+    $array = array();
+    if (!empty($movie['year']))
+        array_push($array, $movie['year']);
+    if (!empty($movie['content_rating']))
+        array_push($array, $movie['content_rating']);
+    if (!empty($movie['imdb_score']))
+        array_push($array, $movie['imdb_score']);
+
+    echo " (".join(', ',$array).")\n";
+    $i++;
+}
+
+?>

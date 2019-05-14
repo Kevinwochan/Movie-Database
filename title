@@ -1,0 +1,59 @@
+#!/usr/bin/php
+<?php
+
+// include the common PHP code file
+require("a2.php");
+
+// Returns a db query og possible movies and it's ratings
+function findMovies ($string){
+    $string = '%'.$string.'%'; // prepare the string for ilike
+    $q = "
+          SELECT id, title, year, content_rating,
+                 imdb_score, genres
+          FROM   movie
+          JOIN   rating ON (movie.id = rating.movie_id)
+          JOIN   (
+                     SELECT movie_id,
+                     ARRAY_TO_STRING(ARRAY_AGG(genre::varchar ORDER BY genre),',') AS genres
+                     FROM   genre
+                     GROUP  BY movie_id
+                 ) AS genre ON (movie.id = genre.movie_id)
+          WHERE  title ILIKE %s
+          ORDER  BY year, imdb_score DESC, title
+    ;";
+    return dbQuery($GLOBALS['db'], mkSQL($q, $string));
+}
+
+// PROGRAM BODY BEGINS
+$usage = "Usage: $argv[0] Title\n e.g ./title \"star war\"";
+
+// Check arguments
+if (count($argv) < 2) exit("$usage\n");
+
+$movies = findMovies ($argv[1]);
+$i = 1;
+// Iterate through the results and print
+while ($movie = dbNext($movies)) {
+    echo "$i. $movie[title]";
+
+    echo " (";
+    $array = array();
+    if (!empty($movie['year']))
+        array_push($array, $movie['year']);
+
+    if (!empty($movie['content_rating']))
+        array_push($array, $movie['content_rating']);
+
+    if (!empty($movie['imdb_score']))
+        array_push($array, $movie['imdb_score']);
+
+    echo join(', ',$array);
+    echo ")";
+
+    echo " [".$movie['genres']."]";
+
+    echo "\n";
+    $i++;
+}
+
+?>

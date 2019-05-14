@@ -1,0 +1,103 @@
+#!/usr/bin/php
+<?php
+
+//
+// pg - print all PG and PG-13 movies of a given year
+//
+
+// include the common PHP code file
+require("a2.php");
+
+function findMovies($limit, $StartYear, $EndYear, $genres){
+    // IF we are searching for genres
+    if (count($genres) > 0){
+        $genres    = "'".str_replace("&", "','", $genres)."'";
+        $q         = "
+            SELECT title, year, content_rating, lang,
+                   imdb_score, num_voted_users
+            FROM (
+                SELECT id, title, year, content_rating, lang
+                FROM   movie
+                WHERE  year >= $StartYear AND year <= $EndYear AND year IS NOT NULL
+            )  AS movie
+            LEFT JOIN (
+                SELECT movie_id,
+                       ARRAY_AGG(genre::text ORDER BY genre) AS genres
+                  FROM   genre
+                  GROUP  BY movie_id
+            )     AS genre ON (movie.id = genre.movie_id)
+            LEFT  JOIN rating ON (movie.id=rating.movie_id)
+            WHERE  genres @> ARRAY[$genres]
+            ORDER  BY imdb_score DESC, num_voted_users DESC
+            limit $limit
+        ;";
+        return  dbQuery($GLOBALS['db'], $q);
+    }
+
+    $q= "
+        SELECT title, year, content_rating, lang, imdb_score, num_voted_users
+        FROM   movie
+        JOIN   rating ON (movie.id = rating.movie_id)
+        WHERE  year >= $StartYear AND year <= $EndYear AND year IS NOT NULL
+        ORDER  BY imdb_score DESC, num_voted_users DESC
+        limit  $limit
+    ;";
+    return  dbQuery($GLOBALS['db'], $q);
+}
+
+// PROGRAM BODY BEGINS
+
+$usage = "Usage: [Genres] K StartYear EndYear\n";
+$usage = $usage."[Action&Adventure] \n";
+$usage = $usage."1 <= K <= 1000\n";
+$usage = $usage."1900 <= Year <= 2020\n";
+$usage = $usage."e.g ./toprank \"Action&Sci-Fi&Adventure\" 10 2005 2005";
+
+// Check arguments
+if (count($argv) < 3 || count($argv) > 5) exit("$usage\n");
+
+$genres = array(); $limit; $StartYear; $EndYear;
+$movies; // to store results of query
+
+if (count($argv) == 4){
+    $limit     = $argv[1];
+    $StartYear = $argv[2];
+    $EndYear   = $argv[3];
+}else{
+    // Get the return results
+    $genres    = $argv[1];
+    $limit     = $argv[2];
+    $StartYear = $argv[3];
+    $EndYear   = $argv[4];
+}
+$movies = findMovies($limit, $StartYear, $EndYear, $genres);
+
+
+// Iterate through the results and print
+$i = 1;
+while ($movie = dbNext($movies)) {
+    echo "$i. $movie[title]";
+    $array = new ArrayObject();
+    echo " (";
+    if (!empty($movie['year']))
+        $array->append($movie['year']);
+    if (!empty($movie['content_rating']))
+        $array->append($movie['content_rating']);
+    if (!empty($movie['lang']))
+        $array->append($movie['lang']);
+    echo join(', ',$array->getArrayCopy());
+    echo ")";
+
+    echo " [";
+    $array = new ArrayObject();
+    if (!empty($movie['imdb_score']))
+        $array->append($movie['imdb_score']);
+    if (!empty($movie['num_voted_users']))
+        $array->append($movie['num_voted_users']);
+    echo join(', ',$array->getArrayCopy());
+    echo "]";
+
+    echo "\n";
+    $i++;
+}
+?>

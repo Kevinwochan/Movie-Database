@@ -1,0 +1,257 @@
+#!/usr/bin/php
+<?php
+
+assert_options(ASSERT_BAIL, true);
+//
+// pg - print all PG and PG-13 movies of a given year
+//
+
+// include the common PHP code file
+require("a2.php");
+
+/*
+    GLOBAL VARIABLES
+*/
+$maxBaconNum = 6;
+
+/*
+    QUERIES
+*/
+
+function listEdges($actorId, $graph){
+    $movies = $graph['byActor'];
+    $movies = $movies[$actorId];
+    $edges = array();
+    foreach($movies as $movie){
+        $actors = $graph['byMovie'];
+        $actors = $actors[$movie];
+        foreach($actors as $actor){
+            if($actor != $actorId){
+                $edge['rel'] = $movie;
+                $edge['dst'] = $actor;
+                array_push($edges, $edge);
+            }
+        }
+    }
+    return $edges;
+}
+// Checks if vertex has already been visited in the path
+function isNotVisited($vertex, $path){
+    foreach ($path as $edge){
+        if ($edge['dst'] == $vertex || $edge['src'] == $vertex)
+            return false;
+    }
+    return true;
+}
+
+function getAllRelations(){
+    $query = "select movie_id, array_to_string(array_agg(actor_id),',') as actors from acting group by movie_id";
+    $result = dbQuery($GLOBALS['db'], $query);
+    $byMovie = array();
+    while ($movie = dbNext($result)){
+        $byMovie[$movie['movie_id']] = explode(',',$movie['actors']);
+    }
+    $query = "select actor_id, array_to_string(array_agg(movie_id),',') as movies from acting group by actor_id";
+    $result = dbQuery($GLOBALS['db'], $query);
+    $byActor = array();
+    while ($actor = dbNext($result)){
+        $byActor[$actor['actor_id']] = explode(',',$actor['movies']);
+    }
+    return $graph = array ('byMovie' => $byMovie, 'byActor' => $byActor);
+}
+
+function in_queue($vertex, $queue){
+    foreach($queue as $path){
+        if (!isNotVisited($vertex, $path))
+            return $path;
+    }
+    return false;
+}
+
+function updateBacon($baconNum){
+    if ($baconNum < $GLOBALS['maxBaconNum']){
+        $GLOBALS['maxBaconNum'] = $baconNum;
+        //echo "maxBaconNum updated to $baconNum\n";
+    }
+    //echo "Path found of bacon number $baconNum\n";
+}
+/*
+    $visited = (vertex => parent edge)
+    visited stores the parent edge to the vertex
+    vertices are actor ids
+    edges are acting relation $edge = ('actor_id' => %d, 'movie_id' => %d)
+ */
+// Bi-directional DFS, good luck reading (sorry for the mess)
+function shortestPaths($src, $dst){
+    $graph = getAllRelations();
+    $pathsToDst = array();
+    $srcQueue = array();
+    $dstQueue = array();
+
+    // itialise srcQueue with edges from src
+    $edges = listEdges($src, $graph);
+    foreach ($edges as $edge){
+        $newPath = array();
+        $edge['src'] = $src;
+        $vertex = $edge['dst'];
+        array_push($newPath, $edge);
+        array_push($srcQueue,$newPath);  // srcQueue vertex for searching
+    }
+    // init the bi-directional queue
+    $edges = listEdges($dst, $graph);
+    foreach ($edges as $edge){
+        $newPath = array();
+        $edge['src'] = $edge['dst'];
+        $edge['dst'] = $dst;
+        array_unshift($newPath, $edge);
+        array_push($dstQueue,$newPath);  // srcQueue vertex for searching
+    }
+
+
+    while (count($srcQueue) > 0 || count($dstQueue) > 0) {
+        if (count($srcQueue) > 0){
+            $srcPath = array_pop($srcQueue);
+            $srcLastEdge = end($srcPath);
+            $srcVertex = $srcLastEdge['dst'];
+            $srcBaconNum = count($srcPath);
+            // early exits
+            if ($srcVertex == $dst){
+                updateBacon($srcBaconNum);
+                if(!in_array($srcPath, $pathsToDst))
+                    array_push($pathsToDst, $srcPath);
+                continue;
+            }
+            $path = in_queue($srcVertex, $dstQueue);
+            if ($path){
+                $srcBaconNum = count($srcPath) + count($path);
+                updateBacon($srcBaconNum);
+                //echo "==============\n";
+                //var_dump($srcPath);
+                //var_dump($path);
+                $fullPath = array_merge($srcPath, $path);
+                if(!in_array($fullPath, $pathsToDst))
+                    array_push($pathsToDst, $fullPath);
+                //var_dump($fullPath);
+                continue;
+            }
+            if ($srcBaconNum + 1 <= $GLOBALS['maxBaconNum']){
+                continue;
+                $edges = listEdges($srcVertex, $graph);
+                foreach ($edges as $edge){
+                    // If we find an relation that leads to the endActor
+                    if (isNotVisited($edge['dst'], $srcPath)){
+                        $newPath = $srcPath;
+                        $edge['src'] = $srcVertex;
+                        array_push($newPath, $edge);
+                        array_push($srcQueue, $newPath);
+                    }
+                }
+            }
+        }
+        if (count($dstQueue) > 0){
+            $dstPath = array_pop($dstQueue);
+            $dstFirstEdge = $dstPath[0];
+            $dstVertex = $dstFirstEdge['src'];
+            $dstBaconNum = count($dstPath);
+
+            if ($dstVertex == $src){
+                updateBacon($dstBaconNum);
+                if(!in_array($dstPath, $pathsToDst))
+                    array_push($pathsToDst, $dstPath);
+                continue;
+            }
+            $path = in_queue($dstVertex, $srcQueue);
+            if ($path){
+                $baconNum = count($dstPath) + count($path);
+                updateBacon($baconNum);
+                //var_dump($dstPath);
+                //var_dump($path);
+                $fullPath = array_merge($path, $dstPath);
+                //var_dump($fullPath);
+                if(!in_array($fullPath, $pathsToDst))
+                    array_push($pathsToDst, $fullPath);
+                continue;
+            }
+            if ($dstBaconNum + 1 <= $GLOBALS['maxBaconNum']){
+                $edges = listEdges($dstVertex, $graph);
+                foreach ($edges as $edge){
+                    $edge['src'] = $edge['dst'];
+                    // If we find an relation that leads to the endActor
+                    if (isNotVisited($edge['src'], $dstPath)){
+                        $edge['dst'] = $dstVertex;
+                        $newPath = $dstPath;
+                        array_unshift($newPath, $edge); // prepend edge to path
+                        array_push($dstQueue, $newPath);
+                    }
+                }
+            }
+        }
+    }
+    return $pathsToDst;
+}
+
+function printPaths($paths, $startActor){
+    $lines = array();
+    foreach ($paths as $path){
+        $baconNum = count($path);
+        if ($baconNum > $GLOBALS['maxBaconNum'])
+            continue;
+        $relations = array();
+        // for each relation
+        foreach ($path as $edge){
+            $srcActor = getActor((int)$edge['src']);
+            $movie    = getMovie((int)$edge['rel']);
+            $actor    = getActor((int)$edge['dst']);
+            $relation = "$srcActor[name] was in $movie[title]";
+            if(!empty($movie['year']))
+                $relation = $relation." ($movie[year])";
+            $relation = $relation." with $actor[name]";
+            // push relation
+            array_push($relations, $relation);
+        }
+        $line = join('; ', $relations);
+        array_push($lines, "$line");
+    }
+    natcasesort($lines);
+    $i = 1;
+    foreach ($lines as $line){
+        if ($i == 1){
+            echo "$i. $line";
+        } else {
+            echo "\n$i. $line";
+        }
+        $i++;
+    }
+}
+
+
+/*
+    PROGRAM BODY BEGINS
+*/
+// Check arguments
+$usage = "Usage: startActor endActor\n";
+$usage = $usage."e.g \"tom cruise\" \"Jeremy Renner\"\n";
+
+if (count($argv) < 2) exit("$usage\n");
+
+// Find the starting actor's ID
+$startActor = getActor($argv[1]);
+if (!$startActor){
+    echo "$argv[1] not found";
+    return;
+}
+// Find the ending actor's ID
+$endActor = getActor($argv[2]);
+if (!$endActor){
+    echo "$argv[2] not found";
+    return;
+}
+
+// Find the shortest paths to the end actor
+$paths = shortestPaths($startActor['id'], $endActor['id']);
+printPaths($paths, $startActor);
+
+echo "\n";
+
+
+?>

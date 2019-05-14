@@ -1,0 +1,58 @@
+#!/bin/bash
+
+for ((k=1;k<16;++k))
+do
+  rm -f $k.out
+  touch $k.out
+done
+
+chmod u+rx acting title toprank similar shortest degrees
+
+dropdb a2
+createdb a2
+psql a2 -q -f ~cs3311/a2/a2.db
+psql a2 -q -f updates.sql
+
+/usr/bin/time  -p  -a timeout 60 ./acting "will SMITH" > 1.out
+
+/usr/bin/time  -p  -a timeout 60 ./title "gaME" > 2.out
+
+/usr/bin/time  -p  -a timeout 60 ./toprank 10 2000 2015 > 3.out
+
+/usr/bin/time  -p  -a timeout 60 ./toprank "Action&Adventure&Sci-Fi&Animation" 10 1990 2018 > 4.out
+
+/usr/bin/time  -p  -a timeout 60 ./similar "interstellar" 30 > 5.out
+
+/usr/bin/time  -p  -a timeout 60 ./similar "toy story" 20 > 6.out
+
+/usr/bin/time  -p  -a timeout 60 ./similar "shrek" 1000 |tail -10 > 7.out 
+
+/usr/bin/time  -p  -a timeout 60 ./shortest "matt damon" "Brad PITT" > 8.out
+
+/usr/bin/time  -p  -a timeout 60 ./shortest "tom cruise" "Scarlett Johansson" > 9.out
+
+/usr/bin/time  -p  -a timeout 60 ./shortest "Sean connery" "james franco" > 10.out
+
+/usr/bin/time  -p  -a timeout 60 ./shortest "brad pitt" "laura breckenridge" > 11.out
+
+/usr/bin/time  -p  -a timeout 60 ./degrees "jennifer garner" 1 2 |tail -4 > 12.out
+
+/usr/bin/time  -p  -a timeout 60 ./degrees "jennifer garner" 3 4 |tail -4 > 13.out
+
+/usr/bin/time  -p  -a timeout 60 ./degrees "will smith" 5 6|tail -20 > 14.out
+
+/usr/bin/time  -p  -a timeout 60 ./degrees "morgan freeman" 1 6 |tail -4 > 15.out
+
+for ((k=1;k<16;++k))
+do
+  sed -i 's/ //g' $k.out
+  correct=`eval diff -q ~cs3311/a2/ans/$k.ans $k.out`
+  if [ -z "$correct" ]; then
+    echo -ne "Y"
+  else
+    echo -ne "N"
+  fi
+done
+echo " "
+
+
